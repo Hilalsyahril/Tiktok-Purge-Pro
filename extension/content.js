@@ -118,6 +118,38 @@ function findYellowFavoriteButton() {
     return null;
 }
 
+async function clickNextVideo() {
+    logToUI("Beralih ke video berikutnya...");
+    const currentUrl = window.location.href;
+
+    // 1. STRATEGI DOM: Ambil elemen paling akhir
+    const nextBtns = document.querySelectorAll('[data-e2e="arrow-right"], button[aria-label*="next" i], button[aria-label*="berikutnya" i], [class*="ArrowRight"]');
+    if (nextBtns.length > 0) {
+        const activeNextBtn = nextBtns[nextBtns.length - 1];
+        simulateRealClick(activeNextBtn);
+    }
+
+    // 2. STRATEGI KEYBOARD: Simulasi Panah Bawah
+    logToUI("Mengirim sinyal Keyboard (Arrow Down)...");
+    const arrowEvent = new KeyboardEvent('keydown', {
+        key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40, bubbles: true, cancelable: true
+    });
+    document.dispatchEvent(arrowEvent);
+
+    // 3. VERIFIKASI URL
+    let retries = 15;
+    while (retries > 0) {
+        await sleep(500);
+        if (window.location.href !== currentUrl) {
+            return true;
+        }
+        retries--;
+    }
+
+    logToUI("Gagal pindah video! DOM dan Keyboard tidak merespons.");
+    return false;
+}
+
 async function runAutomation(mode) {
   isRunning = true;
   logToUI(`Memulai otomatisasi mode: ${mode}...`);
@@ -235,16 +267,13 @@ async function runAutomation(mode) {
     
     await randomSleep(1500, 3500); 
     
-    // 3. Move to next (Using arrow-down as next video on desktop modal)
-    const nextBtn = document.querySelector(SELECTORS.nextButton) || document.querySelector('[data-e2e="arrow-down"]');
-    if (nextBtn) {
-      logToUI("Beralih ke video berikutnya...");
+    // 3. Move to next
+    const success = await clickNextVideo();
+    if (success) {
       currentVideoIndex++;
       logToUI(`Membuka video ke-${currentVideoIndex}...`);
-      nextBtn.click();
       await randomSleep(3500, 6000);
     } else {
-      logToUI("Next button not found.");
       break;
     }
   }
