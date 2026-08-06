@@ -119,35 +119,41 @@ function findYellowFavoriteButton() {
 }
 
 async function clickNextVideo() {
-    logToUI("Beralih ke video berikutnya...");
+    logToUI("Mencoba pindah ke video berikutnya...");
     const currentUrl = window.location.href;
+    
+    let attempts = 0;
+    const maxAttempts = 8;
 
-    // 1. STRATEGI DOM: Ambil elemen paling akhir
-    const nextBtns = document.querySelectorAll('[data-e2e="arrow-right"], button[aria-label*="next" i], button[aria-label*="berikutnya" i], [class*="ArrowRight"]');
-    if (nextBtns.length > 0) {
-        const activeNextBtn = nextBtns[nextBtns.length - 1];
-        simulateRealClick(activeNextBtn);
-    }
-
-    // 2. STRATEGI KEYBOARD: Simulasi Panah Bawah
-    logToUI("Mengirim sinyal Keyboard (Arrow Down)...");
-    const arrowEvent = new KeyboardEvent('keydown', {
-        key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40, bubbles: true, cancelable: true
-    });
-    document.dispatchEvent(arrowEvent);
-
-    // 3. VERIFIKASI URL
-    let retries = 15;
-    while (retries > 0) {
-        await sleep(500);
-        if (window.location.href !== currentUrl) {
-            return true;
+    while (attempts < maxAttempts) {
+        attempts++;
+        
+        // Klik elemen paling akhir di DOM
+        const nextBtns = document.querySelectorAll('[data-e2e="arrow-right"], button[aria-label*="next" i], button[aria-label*="berikutnya" i], [class*="ArrowRight"]');
+        if (nextBtns.length > 0) {
+            simulateRealClick(nextBtns[nextBtns.length - 1]);
         }
-        retries--;
+
+        // Simulasi Keyboard (Panah Bawah)
+        const arrowEvent = new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40, bubbles: true, cancelable: true });
+        document.dispatchEvent(arrowEvent);
+
+        let retries = 5;
+        while (retries > 0) {
+            await sleep(500);
+            if (window.location.href !== currentUrl) {
+                return true; 
+            }
+            retries--;
+        }
+
+        logToUI(`Gagal pindah. Mencoba paksa... (Percobaan ${attempts}/${maxAttempts})`);
     }
 
-    logToUI("Gagal pindah video! DOM dan Keyboard tidak merespons.");
-    return false;
+    logToUI("Sistem STUCK TOTAL. Memuat ulang tab (Refresh) untuk memulihkan...");
+    window.location.reload();
+    await sleep(10000); 
+    return false; 
 }
 
 async function runAutomation(mode) {
@@ -182,23 +188,33 @@ async function runAutomation(mode) {
   // 2. Start loop
   while (isRunning) {
     if (videosInCurrentBatch >= batchSize) {
-      logToUI("Batch limit reached. Istirahat 15 detik sebelum lanjut batch berikutnya...");
+      logToUI(`✅ Batch ke-${batchCount} selesai. Memasuki mode pendinginan 15 detik...`);
+      
+      chrome.runtime.sendMessage({
+          action: "update_ui", 
+          processed: videosInCurrentBatch, 
+          currentBatch: batchCount, 
+      }).catch(() => {});
+      
       const closeBtn = document.querySelector(SELECTORS.closeModal);
       if (closeBtn) closeBtn.click();
       
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
       
-      const restTime = 15000; // 15 detik
-      await sleep(restTime);
+      await sleep(15000); // Jeda 15 detik
       
-      videosInCurrentBatch = 0;
-      batchCount++;
+      videosInCurrentBatch = 0; // RESET angka proses kembali ke 0
+      batchCount++;    // TAMBAH angka batch menjadi 2, 3, dst
       batchSize = Math.floor(Math.random() * (120 - 80 + 1) + 80);
+
+      logToUI(`⏳ Pendinginan selesai. Memulai Batch ke-${batchCount}!`);
 
       const firstVideo = document.querySelector(SELECTORS.videoGrid);
       if (firstVideo) firstVideo.click();
       await sleep(3000);
     }
+
+    let isCleanVideo = false;
 
     // PERFORM ACTION
     try {
@@ -206,30 +222,26 @@ async function runAutomation(mode) {
       const isUiReady = await waitForActionBar();
       if (!isUiReady) {
           logToUI("Timeout: Action bar tidak muncul. Lanjut ke video berikutnya.");
+          isCleanVideo = true;
       } else {
-          logToUI("Mencari tombol target...");
           // 2. SETELAH UI MUNCUL, BARU CARI TOMBOL SESUAI MODE
           let targetButton = null;
           let needsConfirmation = false;
 
-          if (mode === 'repost') {
+          if (mode === 'repost' || mode === 'Remove Reposts') {
               targetButton = findYellowRepostButton();
               needsConfirmation = true;
-          } else if (mode === 'unlike') {
+          } else if (mode === 'unlike' || mode === 'Unlike Videos') {
               targetButton = findRedLikeButton();
               needsConfirmation = false;
-          } else if (mode === 'unsave') {
+          } else if (mode === 'unsave' || mode === 'Clear Favorites' || mode === 'favorit') {
               targetButton = findYellowFavoriteButton();
               needsConfirmation = false;
           }
 
           // 3. EKSEKUSI KLIK
           if (targetButton) {
-              if (mode === 'unlike') {
-                  logToUI("Target Unlike ditemukan! Mengeksekusi klik...");
-              } else {
-                  logToUI("Tombol ditemukan! Mengeksekusi klik...");
-              }
+              logToUI("Target aktif ditemukan! Mengeksekusi...");
               simulateRealClick(targetButton);
               
               if (needsConfirmation) {
@@ -238,13 +250,12 @@ async function runAutomation(mode) {
                   let confirmText = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
                   if (confirmText) {
                       simulateRealClick(confirmText.closest('[role="button"], button') || confirmText.parentElement);
-                      logToUI("Konfirmasi Hapus Repost Berhasil Diklik!");
                   }
               }
               
-              logToUI("Berhasil dieksekusi! Menunggu sinkronisasi server...");
+              logToUI("Eksekusi berhasil. Jeda sinkronisasi...");
               // Jeda sebelum lanjut (wajib untuk memberi waktu server TikTok)
-              await sleep(3000);
+              await sleep(3500);
               
               // UPDATE UI DASHBOARD
               totalProcessed++;
@@ -258,21 +269,29 @@ async function runAutomation(mode) {
               }).catch(() => {});
               
           } else {
-              logToUI("Tombol target tidak ditemukan (mungkin belum di-like/favorit/repost).");
+              logToUI("Video sudah bersih. Melewati... (Fast-Forward)");
+              isCleanVideo = true;
           }
       }
     } catch (e) {
       console.error("Error performing action:", e);
+      isCleanVideo = true;
     }
     
-    await randomSleep(1500, 3500); 
+    if (!isCleanVideo) {
+        await randomSleep(1500, 3500); 
+    }
     
     // 3. Move to next
     const success = await clickNextVideo();
     if (success) {
       currentVideoIndex++;
       logToUI(`Membuka video ke-${currentVideoIndex}...`);
-      await randomSleep(3500, 6000);
+      if (!isCleanVideo) {
+          await randomSleep(3500, 6000);
+      } else {
+          await sleep(1000); // Fast forward jeda singkat
+      }
     } else {
       break;
     }
