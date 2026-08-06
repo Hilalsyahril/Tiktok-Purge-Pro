@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <aside class="sidebar">
+      <h2 class="title">TikTok Purge Pro</h2>
+      
+      <label style="font-size: 10px; color: #ffffff4d; text-transform: uppercase;">Operation Mode</label>
+      <select id="mode">
+        <option value="repost">Remove Reposts</option>
+        <option value="unlike">Unlike Videos</option>
+        <option value="unsave">Unsave Videos</option>
+      </select>
+      
+      <button id="start">START AUTOMATION</button>
+      <button id="stop">STOP ENGINE</button>
+    </aside>
+
+    <main class="dashboard">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Processed</div>
+          <div class="stat-value" id="processed-val">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Batch</div>
+          <div class="stat-value" id="batch-val">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Status</div>
+          <div class="stat-value" id="status-val" style="color: #2ECC71;">READY</div>
+        </div>
+      </div>
+      
+      <div id="log"><div>Status: Ready</div></div>
+    </main>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

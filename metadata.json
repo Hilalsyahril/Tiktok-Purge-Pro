@@ -1,0 +1,6 @@
+{
+  "name": "TikTok Purge Pro",
+  "description": "Chrome Extension for automated TikTok profile cleanup.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
