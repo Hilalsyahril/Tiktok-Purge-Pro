@@ -118,41 +118,96 @@ function findYellowFavoriteButton() {
     return null;
 }
 
-async function clickNextVideo() {
+async function clickNextVideo(mode) {
     logToUI("Mencoba pindah ke video berikutnya...");
     const currentUrl = window.location.href;
     
     let attempts = 0;
-    const maxAttempts = 8;
+    const maxAttempts = 10;
 
     while (attempts < maxAttempts) {
         attempts++;
-        
-        // Klik elemen paling akhir di DOM
         const nextBtns = document.querySelectorAll('[data-e2e="arrow-right"], button[aria-label*="next" i], button[aria-label*="berikutnya" i], [class*="ArrowRight"]');
-        if (nextBtns.length > 0) {
-            simulateRealClick(nextBtns[nextBtns.length - 1]);
-        }
+        if (nextBtns.length > 0) simulateRealClick(nextBtns[nextBtns.length - 1]);
 
-        // Simulasi Keyboard (Panah Bawah)
         const arrowEvent = new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40, bubbles: true, cancelable: true });
         document.dispatchEvent(arrowEvent);
 
         let retries = 5;
         while (retries > 0) {
             await sleep(500);
-            if (window.location.href !== currentUrl) {
-                return true; 
-            }
+            if (window.location.href !== currentUrl) return true;
             retries--;
         }
 
-        logToUI(`Gagal pindah. Mencoba paksa... (Percobaan ${attempts}/${maxAttempts})`);
+        logToUI(`Server menahan navigasi. Jeda 2 dtk... (Percobaan ${attempts}/${maxAttempts})`);
+        await sleep(2000);
     }
 
-    logToUI("Sistem STUCK TOTAL. Memuat ulang tab (Refresh) untuk memulihkan...");
-    window.location.reload();
-    await sleep(10000); 
+    // --- JURUS PAMUNGKAS & TAB RECOVERY ---
+    logToUI("STUCK PARAH! Menutup video untuk mereset memori DOM...");
+    const closeBtn = document.querySelector('[data-e2e="browse-close"], button[aria-label="Tutup"], button[aria-label="Close"]');
+    if (closeBtn) simulateRealClick(closeBtn);
+    else window.history.back();
+
+    logToUI("Mencari tab yang benar sesuai mode operasi...");
+    await sleep(2000); 
+
+    // Tentukan kata kunci tab berdasarkan mode
+    let fallbackText = '';
+    if (mode === 'repost' || mode === 'Remove Reposts') fallbackText = 'postingan ulang';
+    else if (mode === 'unlike' || mode === 'Unlike Videos') fallbackText = 'disukai';
+    else if (mode === 'unsave' || mode === 'Clear Favorites' || mode === 'favorit') fallbackText = 'favorit';
+
+    // Looping cari Tab (Maksimal 10 detik / 20x 500ms)
+    let tabFound = false;
+    let tabWait = 20; 
+    let targetTab = null;
+    
+    while(tabWait > 0 && !tabFound) {
+        // Coba cari pakai selector data-e2e spesifik (bisa berubah di tiap update TikTok)
+        targetTab = document.querySelector(`[data-e2e*="${mode}" i], [data-e2e*="${fallbackText}" i]`);
+        
+        // Coba cari dari teks semua tab
+        if (!targetTab) {
+            const allTabs = document.querySelectorAll('[role="tab"], p, span');
+            for(let t of allTabs) {
+                if(t.textContent.toLowerCase().includes(fallbackText) || t.textContent.toLowerCase().includes(mode)) {
+                    targetTab = t.closest('[role="tab"], div') || t;
+                    break;
+                }
+            }
+        }
+        
+        if (targetTab) {
+            tabFound = true;
+            simulateRealClick(targetTab); 
+            logToUI(`Tab [${fallbackText.toUpperCase()}] ditemukan & diklik! Menunggu grid termuat...`);
+            await sleep(3000); // Tunggu video muncul
+        } else {
+            await sleep(500);
+            tabWait--;
+        }
+    }
+
+    // Jika tab benar-benar hilang (bug server TikTok)
+    if (!tabFound) {
+        logToUI("Tab target TIDAK MUNCUL sama sekali. Melakukan Hard Refresh...");
+        window.location.reload();
+        await sleep(10000);
+        return false;
+    }
+
+    // Klik ulang video pertama dari grid yang sudah benar
+    const firstVideo = document.querySelector('[data-e2e="user-post-item"] a, a[href*="/video/"]');
+    if (firstVideo) {
+        logToUI("Membuka ulang video pertama. Mesin Fast-Forward diaktifkan!");
+        simulateRealClick(firstVideo);
+        await sleep(3000);
+        return true; 
+    }
+
+    logToUI("Gagal menemukan video di grid. Bot berhenti.");
     return false; 
 }
 
@@ -283,7 +338,7 @@ async function runAutomation(mode) {
     }
     
     // 3. Move to next
-    const success = await clickNextVideo();
+    const success = await clickNextVideo(mode);
     if (success) {
       currentVideoIndex++;
       logToUI(`Membuka video ke-${currentVideoIndex}...`);
